@@ -1,0 +1,49 @@
+## Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+publish/
+[Pp]ublish/
+
+# Visual Studio files
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# User-specific / Local settings
+appsettings*.local.json
+*.local
+
+# NuGet Packages
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+
+# Test results and crash dumps
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+*.dmp
+*.dump
+
+# Temporary / Scratch files
+*.tmp
+*.temp
+scratch/
