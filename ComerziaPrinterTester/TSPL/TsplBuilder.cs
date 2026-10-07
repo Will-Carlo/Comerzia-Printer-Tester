@@ -141,35 +141,77 @@ namespace ComerziaPrinterTester.TSPL
         {
             int totalWidthDots = config.WidthDots;
             int totalHeightDots = config.HeightDots;
-            int currentY = 8; // Top margin
+
+            var (pricePrefix, priceAmount) = PriceHelper.ParsePrice(data.PriceText);
+            bool hasPrice = data.IncludePrice && !string.IsNullOrWhiteSpace(priceAmount);
+            bool hasLogo = data.IncludeLogo && data.LogoImage != null;
+            bool hasTop = hasPrice || hasLogo;
+            bool hasName = data.IncludeName && !string.IsNullOrWhiteSpace(data.ProductName);
+            bool hasBarcode = data.CodeMode == CodeDisplayMode.Barcode && data.IncludeBarcode && !string.IsNullOrWhiteSpace(data.Barcode);
+            bool hasQr = data.CodeMode == CodeDisplayMode.QrCode && data.IncludeQr && !string.IsNullOrWhiteSpace(data.QrData);
+            bool hasCode = hasBarcode || hasQr;
+
+            int marginTop = Math.Max(3, (int)(totalHeightDots * 0.03));
+            int marginBottom = Math.Max(3, (int)(totalHeightDots * 0.03));
+            int gap = Math.Max(2, (int)(totalHeightDots * 0.025));
+
+            int activeCount = (hasTop ? 1 : 0) + (hasName ? 1 : 0) + (hasCode ? 1 : 0);
+            int totalGaps = activeCount > 1 ? (activeCount - 1) * gap : 0;
+            int usableH = Math.Max(10, totalHeightDots - marginTop - marginBottom - totalGaps);
+
+            int topRowH = 0;
+            int nameH = 0;
+            int codeH = 0;
+
+            if (hasTop && hasName && hasCode)
+            {
+                topRowH = (int)(usableH * 0.32);
+                nameH = (int)(usableH * 0.20);
+                codeH = usableH - topRowH - nameH;
+            }
+            else if (hasTop && hasCode && !hasName)
+            {
+                topRowH = (int)(usableH * 0.38);
+                codeH = usableH - topRowH;
+            }
+            else if (hasName && hasCode && !hasTop)
+            {
+                nameH = (int)(usableH * 0.26);
+                codeH = usableH - nameH;
+            }
+            else if (hasTop && hasName && !hasCode)
+            {
+                topRowH = (int)(usableH * 0.58);
+                nameH = usableH - topRowH;
+            }
+            else
+            {
+                if (hasTop) topRowH = usableH;
+                else if (hasName) nameH = usableH;
+                else if (hasCode) codeH = usableH;
+            }
+
+            int currentY = marginTop;
 
             // ==========================================
             // 1. TOP ROW: PRECIO (Left) & LOGO (Right)
             // ==========================================
-            var (pricePrefix, priceAmount) = PriceHelper.ParsePrice(data.PriceText);
-            bool hasPrice = data.IncludePrice && !string.IsNullOrWhiteSpace(priceAmount);
-            bool hasLogo = data.IncludeLogo && data.LogoImage != null;
-
-            int topRowHeightDots = 0;
-            if (hasPrice || hasLogo)
+            if (hasTop)
             {
-                int userLogoDots = data.LogoHeightMm > 0 ? (int)Math.Round(data.LogoHeightMm * (config.Dpi / 25.4)) : 0;
-                topRowHeightDots = userLogoDots > 0
-                    ? Math.Min(totalHeightDots / 3, userLogoDots)
-                    : Math.Clamp((int)(totalHeightDots * 0.25), 24, 80);
-
                 // TOP RIGHT: LOGO
                 if (hasLogo && data.LogoImage != null)
                 {
                     int maxLogoWidth = Math.Max(24, (totalWidthDots / 2) - 15);
-                    using Bitmap resizedLogo = ThermalImageConverter.ResizeImage(data.LogoImage, maxLogoWidth, topRowHeightDots);
-                    
+                    int userLogoDots = data.LogoHeightMm > 0 ? (int)Math.Round(data.LogoHeightMm * (config.Dpi / 25.4)) : topRowH;
+                    int finalLogoH = Math.Min(topRowH, userLogoDots);
+
+                    using Bitmap resizedLogo = ThermalImageConverter.ResizeImage(data.LogoImage, maxLogoWidth, finalLogoH);
                     int logoX = Math.Max(totalWidthDots / 2, totalWidthDots - 8 - resizedLogo.Width);
-                    int logoY = currentY + Math.Max(0, (topRowHeightDots - resizedLogo.Height) / 2);
+                    int logoY = currentY + Math.Max(0, (topRowH - resizedLogo.Height) / 2);
                     AppendBitmap(logoX, logoY, resizedLogo);
                 }
 
-                // TOP LEFT: PRECIO (Amount in full-height matching image, "BS" beside it at bottom in 1/3 height)
+                // TOP LEFT: PRECIO
                 if (hasPrice)
                 {
                     string priceFont;
@@ -177,68 +219,87 @@ namespace ComerziaPrinterTester.TSPL
                     int priceFontH, bsFontH, priceCharW;
                     int xMul = 1, yMul = 1;
 
-                    if (topRowHeightDots >= 56)
+                    if (topRowH >= 60)
                     {
                         priceFont = "4"; xMul = 2; yMul = 2; priceFontH = 64; priceCharW = 48;
-                        bsFont = "2"; bsFontH = 20; // ~1/3 of 64
+                        bsFont = "2"; bsFontH = 20;
                     }
-                    else if (topRowHeightDots >= 40)
+                    else if (topRowH >= 44)
                     {
                         priceFont = "5"; priceFontH = 48; priceCharW = 32;
-                        bsFont = "2"; bsFontH = 16; // 1/3 of 48
+                        bsFont = "2"; bsFontH = 16;
                     }
-                    else if (topRowHeightDots >= 26)
+                    else if (topRowH >= 30)
                     {
                         priceFont = "4"; priceFontH = 32; priceCharW = 24;
-                        bsFont = "1"; bsFontH = 12; // ~1/3 of 32
+                        bsFont = "1"; bsFontH = 12;
                     }
-                    else
+                    else if (topRowH >= 22)
                     {
                         priceFont = "3"; priceFontH = 24; priceCharW = 16;
                         bsFont = "1"; bsFontH = 12;
                     }
+                    else if (topRowH >= 18)
+                    {
+                        priceFont = "2"; priceFontH = 20; priceCharW = 12;
+                        bsFont = "1"; bsFontH = 12;
+                    }
+                    else
+                    {
+                        priceFont = "1"; priceFontH = 12; priceCharW = 8;
+                        bsFont = "1"; bsFontH = 12;
+                    }
 
                     int priceX = 10;
-                    int priceY = currentY + Math.Max(0, (topRowHeightDots - priceFontH) / 2);
+                    int priceY = currentY + Math.Max(0, (topRowH - priceFontH) / 2);
 
-                    // 1. Print Price Amount in full font (matching image height)
                     AppendText(priceX, priceY, priceFont, 0, xMul, yMul, priceAmount);
 
-                    // 2. Print "BS" beside it in lower part (1/3 height, bottom-aligned with digits)
                     int amountWidth = priceAmount.Length * priceCharW;
                     int bsX = priceX + amountWidth + 6;
                     int bsY = priceY + priceFontH - bsFontH;
                     AppendText(bsX, bsY, bsFont, 0, 1, 1, pricePrefix);
                 }
 
-                currentY += topRowHeightDots + 6;
+                currentY += topRowH + gap;
             }
 
             // ==========================================
             // 2. MIDDLE: PRODUCT NAME (Centered)
             // ==========================================
-            if (data.IncludeName && !string.IsNullOrWhiteSpace(data.ProductName))
+            if (hasName)
             {
-                string nameFont = totalWidthDots >= 300 && data.ProductName.Length < 25 ? "3" : "2";
-                int charWidth = nameFont == "3" ? 14 : 10;
-                int nameHeight = nameFont == "3" ? 22 : 16;
+                string nameFont;
+                int charWidth, nameHeight;
+
+                if (nameH >= 24 && totalWidthDots >= 280 && data.ProductName.Length < 25)
+                {
+                    nameFont = "3"; charWidth = 14; nameHeight = 22;
+                }
+                else if (nameH >= 18)
+                {
+                    nameFont = "2"; charWidth = 10; nameHeight = 16;
+                }
+                else
+                {
+                    nameFont = "1"; charWidth = 8; nameHeight = 12;
+                }
 
                 int textWidth = data.ProductName.Length * charWidth;
                 int textX = Math.Max(8, (totalWidthDots - textWidth) / 2);
+                int nameY = currentY + Math.Max(0, (nameH - nameHeight) / 2);
 
-                AppendText(textX, currentY, nameFont, 0, 1, 1, data.ProductName);
-                currentY += nameHeight + 6;
+                AppendText(textX, nameY, nameFont, 0, 1, 1, data.ProductName);
+                currentY += nameH + gap;
             }
 
             // ==========================================
             // 3. BOTTOM: BARCODE OR QR (MUTUALLY EXCLUSIVE)
             // ==========================================
-            int remainingSpace = totalHeightDots - currentY - 8;
-
-            if (data.CodeMode == CodeDisplayMode.Barcode && data.IncludeBarcode && !string.IsNullOrWhiteSpace(data.Barcode))
+            if (hasBarcode)
             {
-                int textMargin = 18;
-                int barcodeHeight = Math.Max(18, remainingSpace - textMargin);
+                int textMargin = Math.Min(18, Math.Max(12, (int)(codeH * 0.32)));
+                int barcodeHeight = Math.Max(12, codeH - textMargin);
 
                 string tsplCode = data.BarcodeType.ToUpper() switch
                 {
@@ -270,12 +331,12 @@ namespace ComerziaPrinterTester.TSPL
                 // humanReadable = 2 centers the text below the barcode in TSPL
                 AppendBarcode(bcX, currentY, tsplCode, barcodeHeight, 2, 0, narrow, narrow, data.Barcode);
             }
-            else if (data.CodeMode == CodeDisplayMode.QrCode && data.IncludeQr && !string.IsNullOrWhiteSpace(data.QrData))
+            else if (hasQr)
             {
-                int maxAvailableDim = Math.Min(totalWidthDots - 20, remainingSpace);
-                int qrSize = Math.Max(24, maxAvailableDim);
+                int maxAvailableDim = Math.Min(totalWidthDots - 20, codeH);
+                int qrSize = Math.Max(18, maxAvailableDim);
                 int qrX = (totalWidthDots - qrSize) / 2;
-                int qrY = currentY + Math.Max(0, (remainingSpace - qrSize) / 2);
+                int qrY = currentY + Math.Max(0, (codeH - qrSize) / 2);
 
                 AppendQr(qrX, qrY, data.QrData, qrSize, 0, qrGenerator);
             }
@@ -293,31 +354,74 @@ namespace ComerziaPrinterTester.TSPL
             // Virtual landscape canvas dimensions
             int vWidthDots = totalHeightDots; // 456 dots (the long dimension)
             int vHeightDots = totalWidthDots; // 248 dots (the short dimension)
-            int currentY = 8; // Top margin in virtual landscape
+
+            var (pricePrefix, priceAmount) = PriceHelper.ParsePrice(data.PriceText);
+            bool hasPrice = data.IncludePrice && !string.IsNullOrWhiteSpace(priceAmount);
+            bool hasLogo = data.IncludeLogo && data.LogoImage != null;
+            bool hasTop = hasPrice || hasLogo;
+            bool hasName = data.IncludeName && !string.IsNullOrWhiteSpace(data.ProductName);
+            bool hasBarcode = data.CodeMode == CodeDisplayMode.Barcode && data.IncludeBarcode && !string.IsNullOrWhiteSpace(data.Barcode);
+            bool hasQr = data.CodeMode == CodeDisplayMode.QrCode && data.IncludeQr && !string.IsNullOrWhiteSpace(data.QrData);
+            bool hasCode = hasBarcode || hasQr;
+
+            int marginTop = Math.Max(3, (int)(vHeightDots * 0.03));
+            int marginBottom = Math.Max(3, (int)(vHeightDots * 0.03));
+            int gap = Math.Max(2, (int)(vHeightDots * 0.025));
+
+            int activeCount = (hasTop ? 1 : 0) + (hasName ? 1 : 0) + (hasCode ? 1 : 0);
+            int totalGaps = activeCount > 1 ? (activeCount - 1) * gap : 0;
+            int usableH = Math.Max(10, vHeightDots - marginTop - marginBottom - totalGaps);
+
+            int topRowH = 0;
+            int nameH = 0;
+            int codeH = 0;
+
+            if (hasTop && hasName && hasCode)
+            {
+                topRowH = (int)(usableH * 0.32);
+                nameH = (int)(usableH * 0.20);
+                codeH = usableH - topRowH - nameH;
+            }
+            else if (hasTop && hasCode && !hasName)
+            {
+                topRowH = (int)(usableH * 0.38);
+                codeH = usableH - topRowH;
+            }
+            else if (hasName && hasCode && !hasTop)
+            {
+                nameH = (int)(usableH * 0.26);
+                codeH = usableH - nameH;
+            }
+            else if (hasTop && hasName && !hasCode)
+            {
+                topRowH = (int)(usableH * 0.58);
+                nameH = usableH - topRowH;
+            }
+            else
+            {
+                if (hasTop) topRowH = usableH;
+                else if (hasName) nameH = usableH;
+                else if (hasCode) codeH = usableH;
+            }
+
+            int currentY = marginTop;
 
             // ==========================================
             // 1. TOP ROW: PRECIO (Left) & LOGO (Right)
             // ==========================================
-            var (pricePrefix, priceAmount) = PriceHelper.ParsePrice(data.PriceText);
-            bool hasPrice = data.IncludePrice && !string.IsNullOrWhiteSpace(priceAmount);
-            bool hasLogo = data.IncludeLogo && data.LogoImage != null;
-
-            int topRowHeightDots = 0;
-            if (hasPrice || hasLogo)
+            if (hasTop)
             {
-                int userLogoDots = data.LogoHeightMm > 0 ? (int)Math.Round(data.LogoHeightMm * (config.Dpi / 25.4)) : 0;
-                topRowHeightDots = userLogoDots > 0
-                    ? Math.Min(vHeightDots / 3, userLogoDots)
-                    : Math.Clamp((int)(vHeightDots * 0.25), 24, 80);
-
                 // TOP RIGHT: LOGO (in virtual landscape)
                 if (hasLogo && data.LogoImage != null)
                 {
                     int maxLogoWidth = Math.Max(24, (vWidthDots / 2) - 15);
-                    using Bitmap resizedLogo = ThermalImageConverter.ResizeImage(data.LogoImage, maxLogoWidth, topRowHeightDots);
+                    int userLogoDots = data.LogoHeightMm > 0 ? (int)Math.Round(data.LogoHeightMm * (config.Dpi / 25.4)) : topRowH;
+                    int finalLogoH = Math.Min(topRowH, userLogoDots);
+
+                    using Bitmap resizedLogo = ThermalImageConverter.ResizeImage(data.LogoImage, maxLogoWidth, finalLogoH);
 
                     int vx = Math.Max(vWidthDots / 2, vWidthDots - 8 - resizedLogo.Width);
-                    int vy = currentY + Math.Max(0, (topRowHeightDots - resizedLogo.Height) / 2);
+                    int vy = currentY + Math.Max(0, (topRowH - resizedLogo.Height) / 2);
 
                     // Rotate logo bitmap 90° clockwise for thermal printer
                     using Bitmap rotatedLogo = (Bitmap)resizedLogo.Clone();
@@ -328,7 +432,7 @@ namespace ComerziaPrinterTester.TSPL
                     AppendBitmap(px, py, rotatedLogo);
                 }
 
-                // TOP LEFT: PRECIO (Amount in full-height matching image, "BS" beside it at bottom in 1/3 height)
+                // TOP LEFT: PRECIO
                 if (hasPrice)
                 {
                     string priceFont;
@@ -336,76 +440,94 @@ namespace ComerziaPrinterTester.TSPL
                     int priceFontH, bsFontH, priceCharW;
                     int xMul = 1, yMul = 1;
 
-                    if (topRowHeightDots >= 56)
+                    if (topRowH >= 60)
                     {
                         priceFont = "4"; xMul = 2; yMul = 2; priceFontH = 64; priceCharW = 48;
-                        bsFont = "2"; bsFontH = 20; // ~1/3 of 64
+                        bsFont = "2"; bsFontH = 20;
                     }
-                    else if (topRowHeightDots >= 40)
+                    else if (topRowH >= 44)
                     {
                         priceFont = "5"; priceFontH = 48; priceCharW = 32;
-                        bsFont = "2"; bsFontH = 16; // 1/3 of 48
+                        bsFont = "2"; bsFontH = 16;
                     }
-                    else if (topRowHeightDots >= 26)
+                    else if (topRowH >= 30)
                     {
                         priceFont = "4"; priceFontH = 32; priceCharW = 24;
-                        bsFont = "1"; bsFontH = 12; // ~1/3 of 32
+                        bsFont = "1"; bsFontH = 12;
                     }
-                    else
+                    else if (topRowH >= 22)
                     {
                         priceFont = "3"; priceFontH = 24; priceCharW = 16;
                         bsFont = "1"; bsFontH = 12;
                     }
+                    else if (topRowH >= 18)
+                    {
+                        priceFont = "2"; priceFontH = 20; priceCharW = 12;
+                        bsFont = "1"; bsFontH = 12;
+                    }
+                    else
+                    {
+                        priceFont = "1"; priceFontH = 12; priceCharW = 8;
+                        bsFont = "1"; bsFontH = 12;
+                    }
 
                     int vx_amount = 10;
-                    int vy_amount = currentY + Math.Max(0, (topRowHeightDots - priceFontH) / 2);
+                    int vy_amount = currentY + Math.Max(0, (topRowH - priceFontH) / 2);
 
                     int amountWidth = priceAmount.Length * priceCharW;
                     int vx_bs = vx_amount + amountWidth + 6;
                     int vy_bs = vy_amount + priceFontH - bsFontH;
 
-                    // 1. Print Price Amount in full font
                     int px_amount = Math.Max(priceFontH + 4, totalWidthDots - vy_amount - 4);
                     int py_amount = vx_amount;
                     AppendText(px_amount, py_amount, priceFont, 90, xMul, yMul, priceAmount);
 
-                    // 2. Print "BS" beside it in lower part (1/3 height, bottom-aligned with digits)
                     int px_bs = Math.Max(bsFontH + 4, totalWidthDots - vy_bs - 4);
                     int py_bs = vx_bs;
                     AppendText(px_bs, py_bs, bsFont, 90, 1, 1, pricePrefix);
                 }
 
-                currentY += topRowHeightDots + 6;
+                currentY += topRowH + gap;
             }
 
             // ==========================================
             // 2. MIDDLE: PRODUCT NAME (Centered)
             // ==========================================
-            if (data.IncludeName && !string.IsNullOrWhiteSpace(data.ProductName))
+            if (hasName)
             {
-                string nameFont = vWidthDots >= 300 && data.ProductName.Length < 25 ? "3" : "2";
-                int charWidth = nameFont == "3" ? 14 : 10;
-                int nameHeight = nameFont == "3" ? 22 : 16;
+                string nameFont;
+                int charWidth, nameHeight;
+
+                if (nameH >= 24 && vWidthDots >= 280 && data.ProductName.Length < 25)
+                {
+                    nameFont = "3"; charWidth = 14; nameHeight = 22;
+                }
+                else if (nameH >= 18)
+                {
+                    nameFont = "2"; charWidth = 10; nameHeight = 16;
+                }
+                else
+                {
+                    nameFont = "1"; charWidth = 8; nameHeight = 12;
+                }
 
                 int textWidth = data.ProductName.Length * charWidth;
                 int vx = Math.Max(8, (vWidthDots - textWidth) / 2);
-                int vy = currentY;
+                int vy = currentY + Math.Max(0, (nameH - nameHeight) / 2);
 
                 int px = Math.Max(nameHeight + 4, totalWidthDots - vy - 4);
                 int py = vx;
                 AppendText(px, py, nameFont, 90, 1, 1, data.ProductName);
-                currentY += nameHeight + 6;
+                currentY += nameH + gap;
             }
 
             // ==========================================
             // 3. BOTTOM: BARCODE OR QR (MUTUALLY EXCLUSIVE)
             // ==========================================
-            int remainingSpace = vHeightDots - currentY - 8;
-
-            if (data.CodeMode == CodeDisplayMode.Barcode && data.IncludeBarcode && !string.IsNullOrWhiteSpace(data.Barcode))
+            if (hasBarcode)
             {
-                int textMargin = 18;
-                int barcodeHeight = Math.Max(18, remainingSpace - textMargin);
+                int textMargin = Math.Min(18, Math.Max(12, (int)(codeH * 0.32)));
+                int barcodeHeight = Math.Max(12, codeH - textMargin);
 
                 string tsplCode = data.BarcodeType.ToUpper() switch
                 {
@@ -437,15 +559,14 @@ namespace ComerziaPrinterTester.TSPL
                 int px = Math.Max(barcodeHeight + textMargin + 4, totalWidthDots - vy - 4);
                 int py = vx;
 
-                // humanReadable = 2 centers the text below the barcode in TSPL
                 AppendBarcode(px, py, tsplCode, barcodeHeight, 2, 90, narrow, narrow, data.Barcode);
             }
-            else if (data.CodeMode == CodeDisplayMode.QrCode && data.IncludeQr && !string.IsNullOrWhiteSpace(data.QrData))
+            else if (hasQr)
             {
-                int maxAvailableDim = Math.Min(vWidthDots - 20, remainingSpace);
-                int qrSize = Math.Max(24, maxAvailableDim);
+                int maxAvailableDim = Math.Min(vWidthDots - 20, codeH);
+                int qrSize = Math.Max(18, maxAvailableDim);
                 int vx = (vWidthDots - qrSize) / 2;
-                int vy = currentY + Math.Max(0, (remainingSpace - qrSize) / 2);
+                int vy = currentY + Math.Max(0, (codeH - qrSize) / 2);
 
                 int px = Math.Max(qrSize + 4, totalWidthDots - vy - 4);
                 int py = vx;

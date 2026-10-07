@@ -80,45 +80,86 @@ namespace ComerziaPrinterTester.Utils
 
         private static void DrawLabelElements(Graphics g, int drawWidth, int drawHeight, double scale, LabelConfiguration config, PrintTestData data)
         {
-            int curY = (int)(6 * scale);
+            var (pricePrefix, priceAmount) = PriceHelper.ParsePrice(data.PriceText);
+            bool hasPrice = data.IncludePrice && !string.IsNullOrWhiteSpace(priceAmount);
+            bool hasLogo = data.IncludeLogo && data.LogoImage != null;
+            bool hasTop = hasPrice || hasLogo;
+            bool hasName = data.IncludeName && !string.IsNullOrWhiteSpace(data.ProductName);
+            bool hasBarcode = data.CodeMode == CodeDisplayMode.Barcode && data.IncludeBarcode && !string.IsNullOrWhiteSpace(data.Barcode);
+            bool hasQr = data.CodeMode == CodeDisplayMode.QrCode && data.IncludeQr && !string.IsNullOrWhiteSpace(data.QrData);
+            bool hasCode = hasBarcode || hasQr;
+
+            // Proportional vertical budgeting guarantees zero element cutoff regardless of dimensions
+            int topMargin = Math.Max(2, (int)(drawHeight * 0.03));
+            int bottomMargin = Math.Max(2, (int)(drawHeight * 0.03));
+            int gap = Math.Max(2, (int)(drawHeight * 0.025));
+
+            int activeCount = (hasTop ? 1 : 0) + (hasName ? 1 : 0) + (hasCode ? 1 : 0);
+            int totalGaps = activeCount > 1 ? (activeCount - 1) * gap : 0;
+            int usableH = Math.Max(10, drawHeight - topMargin - bottomMargin - totalGaps);
+
+            int topRowH = 0;
+            int nameH = 0;
+            int codeH = 0;
+
+            if (hasTop && hasName && hasCode)
+            {
+                topRowH = (int)(usableH * 0.32);
+                nameH = (int)(usableH * 0.20);
+                codeH = usableH - topRowH - nameH;
+            }
+            else if (hasTop && hasCode && !hasName)
+            {
+                topRowH = (int)(usableH * 0.38);
+                codeH = usableH - topRowH;
+            }
+            else if (hasName && hasCode && !hasTop)
+            {
+                nameH = (int)(usableH * 0.26);
+                codeH = usableH - nameH;
+            }
+            else if (hasTop && hasName && !hasCode)
+            {
+                topRowH = (int)(usableH * 0.58);
+                nameH = usableH - topRowH;
+            }
+            else
+            {
+                if (hasTop) topRowH = usableH;
+                else if (hasName) nameH = usableH;
+                else if (hasCode) codeH = usableH;
+            }
+
+            int curY = topMargin;
 
             // ==========================================
             // 1. TOP ROW: PRECIO (Left) & LOGO (Right)
             // ==========================================
-            var (pricePrefix, priceAmount) = PriceHelper.ParsePrice(data.PriceText);
-            bool hasPrice = data.IncludePrice && !string.IsNullOrWhiteSpace(priceAmount);
-            bool hasLogo = data.IncludeLogo && data.LogoImage != null;
-
-            if (hasPrice || hasLogo)
+            if (hasTop)
             {
-                int targetTopH = data.LogoHeightMm > 0
-                    ? (int)(data.LogoHeightMm * (config.Dpi / 25.4) * scale)
-                    : (int)(drawHeight * 0.28);
-
-                int topRowH = Math.Clamp(targetTopH, 18, (int)(drawHeight * 0.38));
-
                 // Top Right: Logo
                 int logoH = topRowH;
                 if (hasLogo && data.LogoImage != null)
                 {
-                    int maxLogoW = (int)((drawWidth / 2) - (8 * scale));
-                    using var resized = ThermalImageConverter.ResizeImage(data.LogoImage, maxLogoW, topRowH);
+                    int maxLogoW = Math.Max(16, (int)((drawWidth / 2) - (8 * scale)));
+                    int userTargetH = data.LogoHeightMm > 0 ? (int)(data.LogoHeightMm * (config.Dpi / 25.4) * scale) : topRowH;
+                    int finalLogoH = Math.Min(topRowH, userTargetH);
+
+                    using var resized = ThermalImageConverter.ResizeImage(data.LogoImage, maxLogoW, finalLogoH);
                     int lx = drawWidth - (int)(6 * scale) - resized.Width;
                     int ly = curY + Math.Max(0, (topRowH - resized.Height) / 2);
                     g.DrawImage(resized, lx, ly);
                     logoH = resized.Height;
                 }
 
-                // Top Left: Price (Amount in full height matching image, "BS" beside it at the bottom in 1/3 height)
+                // Top Left: Price (Amount in full height, "BS" at 1/3 height bottom-aligned)
                 if (hasPrice)
                 {
-                    int priceAreaH = (hasLogo && data.LogoImage != null) ? Math.Max(18, logoH) : topRowH;
-                    
-                    // Choose font size in pixels so digits visual height matches priceAreaH
-                    float basePriceFontSize = Math.Max(12f, priceAreaH * 0.95f);
-                    float bsFontSize = Math.Max(7f, basePriceFontSize / 3.0f); // 1/3 of the height
+                    int priceAreaH = (hasLogo && data.LogoImage != null) ? Math.Min(topRowH, Math.Max(12, logoH)) : topRowH;
 
-                    // Ensure price + suffix fit within available left-side width
+                    float basePriceFontSize = Math.Max(8f, priceAreaH * 0.90f);
+                    float bsFontSize = Math.Max(5.5f, basePriceFontSize / 3.0f);
+
                     int maxPriceW = hasLogo ? (int)((drawWidth / 2) - (10 * scale)) : (int)(drawWidth - (16 * scale));
                     using var testPriceFont = new Font("Segoe UI", basePriceFontSize, FontStyle.Bold, GraphicsUnit.Pixel);
                     using var testBsFont = new Font("Segoe UI", bsFontSize, FontStyle.Bold, GraphicsUnit.Pixel);
@@ -130,8 +171,8 @@ namespace ComerziaPrinterTester.Utils
                     if (totalPriceW > maxPriceW && totalPriceW > 0)
                     {
                         float fitRatio = maxPriceW / totalPriceW;
-                        actualPriceFontSize = Math.Max(9f, basePriceFontSize * fitRatio);
-                        bsFontSize = Math.Max(6.5f, actualPriceFontSize / 3.0f);
+                        actualPriceFontSize = Math.Max(7.5f, basePriceFontSize * fitRatio);
+                        bsFontSize = Math.Max(5f, actualPriceFontSize / 3.0f);
                     }
 
                     using var priceFont = new Font("Segoe UI", actualPriceFontSize, FontStyle.Bold, GraphicsUnit.Pixel);
@@ -141,7 +182,6 @@ namespace ComerziaPrinterTester.Utils
                     float curX = (float)(6 * scale);
                     float priceY = curY + Math.Max(0, (topRowH - priceAreaH) / 2);
 
-                    // 1. Draw price amount in large (matching image height)
                     var sf = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
                     var numSize = g.MeasureString(priceAmount, priceFont);
                     var amountRect = new RectangleF(curX, priceY, numSize.Width, priceAreaH);
@@ -149,37 +189,38 @@ namespace ComerziaPrinterTester.Utils
 
                     curX += numSize.Width + (2 * (float)scale);
 
-                    // 2. Draw "BS" beside it at the bottom (1/3 height, bottom-aligned with digits)
                     var bsSize = g.MeasureString(pricePrefix, bsFont);
-                    float bsY = priceY + priceAreaH - bsSize.Height - (2 * (float)scale);
+                    float bsY = priceY + priceAreaH - bsSize.Height - (1 * (float)scale);
                     g.DrawString(pricePrefix, bsFont, priceBrush, curX, bsY);
                 }
 
-                curY += topRowH + (int)(5 * scale);
+                curY += topRowH + gap;
             }
 
             // ==========================================
             // 2. MIDDLE: PRODUCT NAME (Centered)
             // ==========================================
-            if (data.IncludeName && !string.IsNullOrWhiteSpace(data.ProductName))
+            if (hasName)
             {
-                float fontSize = (float)Math.Max(7.5, (drawWidth > 200 && data.ProductName.Length < 25 ? 10 : 8.5) * scale);
+                float fontSize = Math.Clamp(nameH * 0.60f, 7f, 13f);
                 using var nameFont = new Font("Segoe UI", fontSize, FontStyle.Bold);
                 using var textBrush = new SolidBrush(Color.FromArgb(20, 20, 20));
-                var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Near };
-                
-                int nameH = (int)(18 * scale);
+                var sf = new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center,
+                    Trimming = StringTrimming.EllipsisCharacter
+                };
+
                 var textRect = new RectangleF(4, curY, drawWidth - 8, nameH);
                 g.DrawString(data.ProductName, nameFont, textBrush, textRect, sf);
-                curY += nameH + (int)(4 * scale);
+                curY += nameH + gap;
             }
 
             // ==========================================
             // 3. BOTTOM: BARCODE OR QR (MUTUALLY EXCLUSIVE)
             // ==========================================
-            int remainingH = drawHeight - curY - (int)(6 * scale);
-
-            if (data.CodeMode == CodeDisplayMode.Barcode && data.IncludeBarcode && !string.IsNullOrWhiteSpace(data.Barcode))
+            if (hasBarcode)
             {
                 string tsplCode = data.BarcodeType.ToUpper() switch
                 {
@@ -209,8 +250,8 @@ namespace ComerziaPrinterTester.Utils
                 int bcTotalWidthDots = modules * narrow;
                 int bcXDots = Math.Max(8, (vWidthDots - bcTotalWidthDots) / 2);
 
-                int textHeight = (int)(13 * scale);
-                int bcHeight = Math.Max(16, remainingH - textHeight);
+                int textHeight = Math.Min(16, Math.Max(9, (int)(codeH * 0.32)));
+                int bcHeight = Math.Max(10, codeH - textHeight);
                 int bcWidth = Math.Max(20, (int)(bcTotalWidthDots * scale));
                 int bcX = (int)(bcXDots * scale);
 
@@ -228,17 +269,22 @@ namespace ComerziaPrinterTester.Utils
                     g.FillRectangle(barBrush, bcX, curY, bcWidth, bcHeight);
                 }
 
-                // Human readable text below barcode - centered directly under the bars
-                using var codeFont = new Font("Consolas", (float)Math.Max(7, 7.5 * scale), FontStyle.Regular);
-                var sf = new StringFormat { Alignment = StringAlignment.Center };
-                g.DrawString(data.Barcode, codeFont, Brushes.Black, new RectangleF(bcX, curY + bcHeight + 1, bcWidth, textHeight), sf);
+                // Human readable text below barcode - vertically centered within textHeight box
+                float codeFontSize = Math.Clamp(textHeight * 0.70f, 6.5f, 10f);
+                using var codeFont = new Font("Consolas", codeFontSize, FontStyle.Regular);
+                var sf = new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center
+                };
+                g.DrawString(data.Barcode, codeFont, Brushes.Black, new RectangleF(bcX, curY + bcHeight, bcWidth, textHeight), sf);
             }
-            else if (data.CodeMode == CodeDisplayMode.QrCode && data.IncludeQr && !string.IsNullOrWhiteSpace(data.QrData))
+            else if (hasQr)
             {
-                int maxQr = Math.Min(drawWidth - (int)(12 * scale), remainingH);
-                int qrSize = Math.Max(20, maxQr);
+                int maxQr = Math.Min(drawWidth - (int)(12 * scale), codeH);
+                int qrSize = Math.Max(16, maxQr);
                 int qrX = (drawWidth - qrSize) / 2;
-                int qrY = curY + Math.Max(0, (remainingH - qrSize) / 2);
+                int qrY = curY + Math.Max(0, (codeH - qrSize) / 2);
 
                 try
                 {
