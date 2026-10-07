@@ -97,7 +97,7 @@ namespace ComerziaPrinterTester
 
         private void BuildCustomUi()
         {
-            this.Text = "Comerzia Printer Tester - PhiloPOS 320B (TSPL Direct Thermal)";
+            this.Text = "Comerzia Printer Tester";
             this.BackColor = Color.FromArgb(244, 246, 249);
 
             var mainLayout = new TableLayoutPanel
@@ -125,7 +125,7 @@ namespace ComerziaPrinterTester
             int curY = 0;
 
             // 1. Connection Group
-            var grpConn = CreateGroupBox("1. Conexión TCP/IP (PhiloPOS 320B)", ref curY, 95, leftPanel);
+            var grpConn = CreateGroupBox("1. Conexión TCP/IP", ref curY, 95, leftPanel);
             
             var lblIp = new Label { Text = "IP Impresora:", Location = new Point(15, 26), AutoSize = true };
             txtIp = new TextBox { Text = "192.168.1.100", Location = new Point(98, 23), Width = 112, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };

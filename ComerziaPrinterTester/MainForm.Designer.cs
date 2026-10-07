@@ -23,7 +23,7 @@ namespace ComerziaPrinterTester
             // Main Form Settings
             this.ClientSize = new System.Drawing.Size(1080, 780);
             this.MinimumSize = new System.Drawing.Size(1000, 720);
-            this.Text = "Comerzia Printer Tester - PhiloPOS 320B (TSPL)";
+            this.Text = "Comerzia Printer Tester";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
 
