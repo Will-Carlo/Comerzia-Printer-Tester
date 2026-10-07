@@ -58,12 +58,41 @@ namespace ComerziaPrinterTester
         public MainForm()
         {
             InitializeComponent();
+            LoadAppIcon();
             _printerService = new PrinterTestService();
             _settings = ConfigStorage.LoadSettings();
 
             BuildCustomUi();
             LoadSettingsToUi();
             UpdatePreview();
+        }
+
+        private void LoadAppIcon()
+        {
+            try
+            {
+                string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "printer-icon.ico");
+                if (File.Exists(iconPath))
+                {
+                    this.Icon = new Icon(iconPath);
+                }
+                else
+                {
+                    string? exePath = Environment.ProcessPath;
+                    if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
+                    {
+                        var extracted = Icon.ExtractAssociatedIcon(exePath);
+                        if (extracted != null)
+                        {
+                            this.Icon = extracted;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback gracefully
+            }
         }
 
         private void BuildCustomUi()
