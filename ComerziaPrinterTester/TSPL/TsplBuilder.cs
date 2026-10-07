@@ -248,14 +248,14 @@ namespace ComerziaPrinterTester.TSPL
                     _ => "128"
                 };
 
-                int estModules = (data.Barcode.Length + 4) * 11 + 2;
+                int modules = BarcodeHelper.CalculateBarcodeModules(data.Barcode, tsplCode);
                 
                 int narrow = 2;
-                if (estModules * 3 <= totalWidthDots - 24)
+                if (modules * 3 <= totalWidthDots - 20)
                 {
                     narrow = 3;
                 }
-                else if (estModules * 2 <= totalWidthDots - 16)
+                else if (modules * 2 <= totalWidthDots - 16)
                 {
                     narrow = 2;
                 }
@@ -264,10 +264,11 @@ namespace ComerziaPrinterTester.TSPL
                     narrow = 1;
                 }
 
-                int bcTotalWidth = estModules * narrow;
+                int bcTotalWidth = modules * narrow;
                 int bcX = Math.Max(8, (totalWidthDots - bcTotalWidth) / 2);
 
-                AppendBarcode(bcX, currentY, tsplCode, barcodeHeight, 1, 0, narrow, narrow, data.Barcode);
+                // humanReadable = 2 centers the text below the barcode in TSPL
+                AppendBarcode(bcX, currentY, tsplCode, barcodeHeight, 2, 0, narrow, narrow, data.Barcode);
             }
             else if (data.CodeMode == CodeDisplayMode.QrCode && data.IncludeQr && !string.IsNullOrWhiteSpace(data.QrData))
             {
@@ -414,13 +415,13 @@ namespace ComerziaPrinterTester.TSPL
                     _ => "128"
                 };
 
-                int estModules = (data.Barcode.Length + 4) * 11 + 2;
+                int modules = BarcodeHelper.CalculateBarcodeModules(data.Barcode, tsplCode);
                 int narrow = 2;
-                if (estModules * 3 <= vWidthDots - 24)
+                if (modules * 3 <= vWidthDots - 20)
                 {
                     narrow = 3;
                 }
-                else if (estModules * 2 <= vWidthDots - 16)
+                else if (modules * 2 <= vWidthDots - 16)
                 {
                     narrow = 2;
                 }
@@ -429,14 +430,15 @@ namespace ComerziaPrinterTester.TSPL
                     narrow = 1;
                 }
 
-                int bcTotalWidth = estModules * narrow;
+                int bcTotalWidth = modules * narrow;
                 int vx = Math.Max(8, (vWidthDots - bcTotalWidth) / 2);
                 int vy = currentY;
 
                 int px = Math.Max(barcodeHeight + textMargin + 4, totalWidthDots - vy - 4);
                 int py = vx;
 
-                AppendBarcode(px, py, tsplCode, barcodeHeight, 1, 90, narrow, narrow, data.Barcode);
+                // humanReadable = 2 centers the text below the barcode in TSPL
+                AppendBarcode(px, py, tsplCode, barcodeHeight, 2, 90, narrow, narrow, data.Barcode);
             }
             else if (data.CodeMode == CodeDisplayMode.QrCode && data.IncludeQr && !string.IsNullOrWhiteSpace(data.QrData))
             {

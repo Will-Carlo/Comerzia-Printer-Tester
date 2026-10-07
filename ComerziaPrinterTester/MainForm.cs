@@ -17,6 +17,7 @@ namespace ComerziaPrinterTester
         private TextBox txtIp = null!;
         private NumericUpDown numPort = null!;
         private Button btnTestConnection = null!;
+        private Button btnScanNetwork = null!;
         private Label lblConnectionStatus = null!;
 
         private NumericUpDown numWidth = null!;
@@ -98,16 +99,30 @@ namespace ComerziaPrinterTester
             var grpConn = CreateGroupBox("1. Conexión TCP/IP (PhiloPOS 320B)", ref curY, 95, leftPanel);
             
             var lblIp = new Label { Text = "IP Impresora:", Location = new Point(15, 26), AutoSize = true };
-            txtIp = new TextBox { Text = "192.168.1.100", Location = new Point(100, 23), Width = 130, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+            txtIp = new TextBox { Text = "192.168.1.100", Location = new Point(98, 23), Width = 112, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+
+            btnScanNetwork = new Button
+            {
+                Text = "🔍 Buscar",
+                Location = new Point(215, 21),
+                Size = new Size(82, 29),
+                BackColor = Color.FromArgb(40, 167, 69),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnScanNetwork.FlatAppearance.BorderSize = 0;
+            btnScanNetwork.Click += async (s, e) => await OnScanNetworkClicked();
             
-            var lblPort = new Label { Text = "Puerto:", Location = new Point(245, 26), AutoSize = true };
-            numPort = new NumericUpDown { Minimum = 1, Maximum = 65535, Value = 9100, Location = new Point(295, 23), Width = 75 };
+            var lblPort = new Label { Text = "Puerto:", Location = new Point(305, 26), AutoSize = true };
+            numPort = new NumericUpDown { Minimum = 1, Maximum = 65535, Value = 9100, Location = new Point(353, 23), Width = 58 };
 
             btnTestConnection = new Button
             {
-                Text = "🔌 Probar conexión",
-                Location = new Point(385, 21),
-                Size = new Size(130, 29),
+                Text = "🔌 Probar",
+                Location = new Point(418, 21),
+                Size = new Size(95, 29),
                 BackColor = Color.FromArgb(0, 122, 255),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
@@ -126,7 +141,7 @@ namespace ComerziaPrinterTester
                 ForeColor = Color.FromArgb(70, 70, 70)
             };
 
-            grpConn.Controls.AddRange(new Control[] { lblIp, txtIp, lblPort, numPort, btnTestConnection, lblConnectionStatus });
+            grpConn.Controls.AddRange(new Control[] { lblIp, txtIp, btnScanNetwork, lblPort, numPort, btnTestConnection, lblConnectionStatus });
 
             // 2. Label Configuration Group
             var grpConfig = CreateGroupBox("2. Configuración de Etiqueta & Tamaño", ref curY, 110, leftPanel);
@@ -579,6 +594,86 @@ namespace ComerziaPrinterTester
                 lblConnectionStatus.ForeColor = Color.FromArgb(220, 53, 69);
                 AppendLog($"ERROR: {result.Message}");
                 MessageBox.Show(result.Message, "Error de Conexión", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private async Task OnScanNetworkClicked()
+        {
+            btnScanNetwork.Enabled = false;
+            btnTestConnection.Enabled = false;
+            lblConnectionStatus.Text = "🔍 Buscando en red local...";
+            lblConnectionStatus.ForeColor = Color.FromArgb(0, 102, 204);
+            AppendLog("Iniciando búsqueda automática de impresoras térmicas en la red local (puerto 9100)...");
+
+            try
+            {
+                var prefixes = NetworkScannerService.GetLocalSubnetPrefixes();
+                List<NetworkScannerService.DiscoveredPrinter> allPrinters = new();
+
+                foreach (var prefix in prefixes)
+                {
+                    AppendLog($"Escaneando rango {prefix}1 al {prefix}254...");
+                    var found = await NetworkScannerService.ScanSubnetAsync(
+                        prefix,
+                        port: (int)numPort.Value,
+                        timeoutMs: 300,
+                        progressCallback: (done, total) =>
+                        {
+                            if (this.IsHandleCreated)
+                            {
+                                this.BeginInvoke(() =>
+                                {
+                                    lblConnectionStatus.Text = $"🔍 Escaneando {prefix}* ({done}/{total})...";
+                                });
+                            }
+                        });
+
+                    allPrinters.AddRange(found);
+                    if (allPrinters.Count > 0)
+                    {
+                        break;
+                    }
+                }
+
+                if (allPrinters.Count > 0)
+                {
+                    var best = allPrinters.First();
+                    txtIp.Text = best.IpAddress;
+                    numPort.Value = best.Port;
+                    lblConnectionStatus.Text = $"🟢 Impresora detectada en {best.IpAddress}:{best.Port} ({best.LatencyMs}ms)";
+                    lblConnectionStatus.ForeColor = Color.FromArgb(40, 167, 69);
+                    AppendLog($"¡ÉXITO! Impresora detectada en {best.IpAddress}:{best.Port} con respuesta en {best.LatencyMs}ms.");
+                    SaveSettingsFromUi();
+                    System.Media.SystemSounds.Asterisk.Play();
+                }
+                else
+                {
+                    lblConnectionStatus.Text = "⚠️ No se detectó impresora en puerto 9100";
+                    lblConnectionStatus.ForeColor = Color.FromArgb(200, 100, 0);
+                    AppendLog("No se encontró ningún dispositivo respondiendo en el puerto 9100 en la red local.");
+                    AppendLog("💡 SUGERENCIA IMPORTANTE: Para saber la IP actual de tu impresora física, apágala, mantén presionado el botón FEED y enciéndela sin soltar FEED por 3 segundos hasta que imprima la hoja de 'Self-Test' (ahí verás su IP exacta).");
+                    MessageBox.Show(
+                        "No se detectó ninguna impresora con el puerto 9100 abierto en la subred local actual.\n\n" +
+                        "💡 Cómo obtener la IP exacta físicamente:\n" +
+                        "1. Apaga la impresora.\n" +
+                        "2. Mantén presionado el botón FEED.\n" +
+                        "3. Enciéndela SIN soltar FEED durante 3 segundos hasta que suene o empiece a imprimir.\n" +
+                        "4. Se imprimirá un ticket de prueba (Self-Test) con la dirección IP que tiene asignada.",
+                        "Impresora no detectada",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                lblConnectionStatus.Text = "❌ Error durante el escaneo";
+                lblConnectionStatus.ForeColor = Color.Red;
+                AppendLog($"Error al escanear la red: {ex.Message}");
+            }
+            finally
+            {
+                btnScanNetwork.Enabled = true;
+                btnTestConnection.Enabled = true;
             }
         }
 

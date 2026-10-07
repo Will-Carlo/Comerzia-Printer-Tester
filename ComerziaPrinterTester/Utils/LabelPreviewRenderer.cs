@@ -181,10 +181,38 @@ namespace ComerziaPrinterTester.Utils
 
             if (data.CodeMode == CodeDisplayMode.Barcode && data.IncludeBarcode && !string.IsNullOrWhiteSpace(data.Barcode))
             {
+                string tsplCode = data.BarcodeType.ToUpper() switch
+                {
+                    "CODE128" or "128" => "128",
+                    "EAN13" or "EAN-13" => "EAN13",
+                    "CODE39" or "39" => "39",
+                    _ => "128"
+                };
+
+                int vWidthDots = config.HeightMm > config.WidthMm ? config.HeightDots : config.WidthDots;
+                int modules = BarcodeHelper.CalculateBarcodeModules(data.Barcode, tsplCode);
+
+                int narrow = 2;
+                if (modules * 3 <= vWidthDots - 20)
+                {
+                    narrow = 3;
+                }
+                else if (modules * 2 <= vWidthDots - 16)
+                {
+                    narrow = 2;
+                }
+                else
+                {
+                    narrow = 1;
+                }
+
+                int bcTotalWidthDots = modules * narrow;
+                int bcXDots = Math.Max(8, (vWidthDots - bcTotalWidthDots) / 2);
+
                 int textHeight = (int)(13 * scale);
                 int bcHeight = Math.Max(16, remainingH - textHeight);
-                int bcWidth = (int)(drawWidth * 0.88); // maximize width
-                int bcX = (drawWidth - bcWidth) / 2;
+                int bcWidth = Math.Max(20, (int)(bcTotalWidthDots * scale));
+                int bcX = (int)(bcXDots * scale);
 
                 try
                 {
@@ -200,10 +228,10 @@ namespace ComerziaPrinterTester.Utils
                     g.FillRectangle(barBrush, bcX, curY, bcWidth, bcHeight);
                 }
 
-                // Human readable text below barcode
+                // Human readable text below barcode - centered directly under the bars
                 using var codeFont = new Font("Consolas", (float)Math.Max(7, 7.5 * scale), FontStyle.Regular);
                 var sf = new StringFormat { Alignment = StringAlignment.Center };
-                g.DrawString(data.Barcode, codeFont, Brushes.Black, new RectangleF(4, curY + bcHeight + 1, drawWidth - 8, textHeight), sf);
+                g.DrawString(data.Barcode, codeFont, Brushes.Black, new RectangleF(bcX, curY + bcHeight + 1, bcWidth, textHeight), sf);
             }
             else if (data.CodeMode == CodeDisplayMode.QrCode && data.IncludeQr && !string.IsNullOrWhiteSpace(data.QrData))
             {

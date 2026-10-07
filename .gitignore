@@ -5,6 +5,7 @@
 [Ll]ogs/
 publish/
 [Pp]ublish/
+publish_*/
 
 # Visual Studio files
 .vs/
