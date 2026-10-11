@@ -27,6 +27,8 @@ publish_*/
 *.sln.iml
 
 # User-specific / Local settings
+appsettings.json
+appsettings*.json
 appsettings*.local.json
 *.local
 
